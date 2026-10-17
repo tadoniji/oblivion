@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-[#050507] text-neutral-200 select-none overflow-hidden">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Projet Oblivion — Arpentage de la Surcouche</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@200;300;400;500&family=Inter:wght@200;300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      margin: 0;
+      background: #050507;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+    .font-poetic { font-family: 'Cormorant Garamond', serif; }
+
+    /* Eyelids physical translation overlay */
+    .eyelid-top {
+      transform: translateY(-100%);
+      transition: transform 0.35s cubic-bezier(0.2, 0.85, 0.3, 1);
+    }
+    .eyelid-bottom {
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.2, 0.85, 0.3, 1);
+    }
+    .eyelids-closed .eyelid-top { transform: translateY(0%); }
+    .eyelids-closed .eyelid-bottom { transform: translateY(0%); }
+
+    /* Custom thin scrollbar */
+    .custom-scroll::-webkit-scrollbar { width: 3px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(10, 10, 14, 0.5); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(80, 85, 100, 0.4); border-radius: 2px; }
+
+    /* Pulsing crimson radar */
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.4; }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-subtle 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full w-full bg-[#050507] text-neutral-300 relative overflow-hidden">
+
+  <!-- Scène en vue -->
+  <div id="viewport" class="relative w-full h-full cursor-crosshair overflow-hidden touch-none">
+    <canvas id="world-canvas" class="absolute inset-0 w-full h-full block touch-none"></canvas>
+
+    <!-- Vignette -->
+    <div id="vignette-overlay" class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(3,3,5,0.92)_100%)] transition-opacity duration-700"></div>
+
+    <!-- Simu paupières -->
+    <div id="eyelids" class="pointer-events-none absolute inset-0 z-40 flex flex-col">
+      <div class="eyelid-top w-full h-1/2 bg-[#030304] border-b border-neutral-800/80 shadow-2xl flex items-end justify-center pb-6">
+        <span id="eyelid-sub-label" class="text-neutral-500 font-mono-code text-[11px] md:text-xs tracking-widest uppercase opacity-0 transition-opacity duration-200 eyelid-label">Perception suspendue</span>
+      </div>
+      <div class="eyelid-bottom w-full h-1/2 bg-[#030304] border-t border-neutral-800/80 shadow-2xl flex items-start justify-center pt-6">
+        <span id="eyelid-main-label" class="text-neutral-500 font-mono-code text-[10px] md:text-xs tracking-widest uppercase opacity-0 transition-opacity duration-200 eyelid-label">Purge de l'attention visuelle...</span>
+      </div>
+    </div>
+
+    <!-- Barre hte ATH -->
+    <div id="top-hud" class="pointer-events-none absolute top-0 left-0 right-0 z-20 p-3 sm:p-5 flex justify-between items-start gap-3">
+      <div class="flex flex-col space-y-1">
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <span class="font-poetic text-xl sm:text-2xl md:text-3xl italic tracking-wide text-neutral-100">Oblivion</span>
+          <span class="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono-code uppercase bg-neutral-900/90 border border-neutral-800 text-neutral-400">Arpentage</span>
+          <!-- Affichage du Jour -->
+          <span id="day-badge" class="px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-mono-code uppercase bg-sky-950/70 border border-sky-800/60 text-sky-300">Jour 01</span>
+        </div>
+        <p class="hidden sm:block text-[11px] text-neutral-500 font-mono-code tracking-wide">
+          Glisser : Naviguer • Sélectionner / Inspecter • [ESPACE] : Se reposer & étalonner le jour
+        </p>
+      </div>
+
+      <!-- Carnet et jauges -->
+      <div class="flex items-center space-x-2.5 sm:space-x-4">
+        <!-- Cadence du Jour -->
+        <div class="flex flex-col items-end">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-[9px] sm:text-[10px] uppercase font-mono-code tracking-wider text-neutral-400">Cycle Jour</span>
+            <span id="day-timer-val" class="text-[11px] sm:text-xs font-mono-code text-sky-400 font-medium">--:--</span>
+          </div>
+          <div class="w-20 sm:w-28 md:w-32 h-1.5 bg-neutral-900/90 rounded-full overflow-hidden border border-neutral-800 mt-0.5">
+            <div id="day-progress-bar" class="h-full bg-sky-500/80 transition-all duration-150 w-0"></div>
+          </div>
+        </div>
+
+        <!-- Saturation / Cognitive Burden -->
+        <div class="flex flex-col items-end">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-[9px] sm:text-[10px] uppercase font-mono-code tracking-wider text-neutral-400">Pression</span>
+            <span id="burden-pct" class="text-[11px] sm:text-xs font-mono-code text-rose-400 font-medium">0%</span>
+          </div>
+          <div class="w-20 sm:w-28 md:w-32 h-1.5 bg-neutral-900/90 rounded-full overflow-hidden border border-neutral-800 mt-0.5">
+            <div id="burden-bar" class="h-full bg-rose-500/80 transition-all duration-300 w-0"></div>
+          </div>
+        </div>
+
+        <!-- Carnet complet -->
+        <button id="toggle-notebook-btn" class="pointer-events-auto flex items-center space-x-1.5 sm:space-x-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 active:bg-neutral-700 border border-neutral-800 text-neutral-200 text-xs font-mono-code transition shadow-lg cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <span class="hidden sm:inline">Carnet</span>
+          <span id="log-counter-badge" class="px-1.5 py-0.2 rounded-full text-[9px] bg-neutral-800 text-neutral-300 font-mono-code">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Barre ATH bas -->
+    <div id="bottom-hud" class="pointer-events-none absolute bottom-16 sm:bottom-0 left-0 right-0 z-20 p-3 sm:p-5 flex justify-between items-end gap-3 pb-safe">
+      <div class="max-w-xs sm:max-w-md">
+        <p id="state-quote" class="font-poetic italic text-xs sm:text-sm md:text-base text-neutral-400 leading-snug drop-shadow">
+          « Rien n'existe avant qu'on ne le fixe. En observant, vous créez votre cage. »
+        </p>
+      </div>
+    </div>
+
+    <!-- Contrôles sur téléphone -->
+    <div id="touch-controls" class="pointer-events-auto fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-5 sm:bottom-5 z-30 flex items-center justify-between sm:justify-end gap-2 bg-[#0c0c11]/90 backdrop-blur-md border border-neutral-800/90 rounded-2xl p-1.5 shadow-2xl text-[11px] font-mono-code">
+      <button id="btn-mode-pan" class="touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-sky-500/40 bg-sky-950/40 text-sky-300 font-medium transition cursor-pointer">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+        <span>Naviguer</span>
+      </button>
+
+      <button id="btn-mode-select" class="touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-transparent hover:border-neutral-700 bg-neutral-900/70 text-neutral-400 transition cursor-pointer">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h4M4 4v4m0-4l6 6m10-6h-4m4 0v4m0-4l-6 6M4 20h4m-4 0v-4m0 4l6-6m10 6h-4m4 0v-4m0 4l-6-6" />
+        </svg>
+        <span>Capturer</span>
+      </button>
+
+      <button id="btn-mode-inspect" class="touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-transparent hover:border-neutral-700 bg-neutral-900/70 text-neutral-400 transition cursor-pointer">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <span>Inspecter</span>
+      </button>
+
+      <button id="btn-close-eyes" class="flex-none flex items-center justify-center px-3 py-2 rounded-xl border border-neutral-700 bg-neutral-800 active:bg-neutral-950 text-neutral-300 active:text-rose-400 font-medium transition cursor-pointer select-none">
+        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+        </svg>
+        <span>Se reposer</span>
+      </button>
+    </div>
+
+    <!-- Champ tiroir carnet -->
+    <div id="notebook-drawer" class="fixed top-0 right-0 bottom-0 w-full sm:w-96 z-50 bg-[#09090c]/98 backdrop-blur-xl border-l border-neutral-800 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out">
+      <div class="p-4 border-b border-neutral-800 flex justify-between items-center bg-[#060608]">
+        <div>
+          <h2 class="font-poetic text-xl italic text-neutral-100">Carnet d'Arpentage</h2>
+          <p class="text-[10px] font-mono-code text-neutral-500 tracking-wider uppercase">Registre de la surcouche</p>
+        </div>
+        <button id="close-notebook-btn" class="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-neutral-200 active:scale-95 transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-3 grid grid-cols-2 gap-2 border-b border-neutral-800 bg-neutral-950/70 text-[11px] font-mono-code">
+        <div class="p-2 rounded bg-neutral-900/60 border border-neutral-800">
+          <span class="text-neutral-500 block text-[9px] uppercase">Détails fixés</span>
+          <span id="nb-fixed-count" class="text-neutral-200 font-medium text-sm">0</span>
+        </div>
+        <div class="p-2 rounded bg-neutral-900/60 border border-neutral-800">
+          <span class="text-neutral-500 block text-[9px] uppercase">Récidives écarlates</span>
+          <span id="nb-recurrence-count" class="text-rose-400 font-medium text-sm">0</span>
+        </div>
+        <div class="p-2 rounded bg-neutral-900/60 border border-neutral-800 col-span-2 flex justify-between items-center text-[10px]">
+          <span class="text-neutral-500">Sous le regard :</span>
+          <span id="hovered-tile-info" class="text-neutral-300 font-medium truncate max-w-[190px]">Aucun élément</span>
+        </div>
+      </div>
+
+      <div class="p-2.5 px-4 border-b border-neutral-800 flex justify-between items-center text-[10px] font-mono-code text-neutral-500 uppercase">
+        <span>Chronologie d'observation</span>
+        <button id="clear-local-btn" class="text-neutral-400 hover:text-neutral-200 underline underline-offset-2 cursor-pointer">Vider journal</button>
+      </div>
+      <div id="notebook-logs" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
+        <div id="empty-log-msg" class="text-center py-10 text-xs font-mono-code text-neutral-600 leading-relaxed">
+          Aucun détail n'a encore été figé par votre regard.<br>
+          <span class="text-[10px] text-neutral-700 block mt-2">Passez en mode « Capturer » ou faites un appui long sur un élément.</span>
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-neutral-800 bg-[#060608] text-[10px] font-mono-code text-neutral-500 leading-relaxed">
+        <span class="text-neutral-400 font-medium">Loi d'Oblivion :</span> Tout ce qui est catalogué persiste. Pour rompre la boucle : videz le journal et n'observez rien pendant un jour entier.
+      </div>
+    </div>
+
+    <!-- Modal d'analyse -->
+    <div id="inspect-modal" class="pointer-events-none fixed z-50 p-4 rounded-xl bg-[#0c0c11]/95 backdrop-blur-lg border border-neutral-700 shadow-2xl w-72 max-w-[90vw] text-xs font-mono-code opacity-0 scale-95 transition-all duration-150">
+      <div class="flex justify-between items-start border-b border-neutral-800 pb-2 mb-2">
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+          <span id="inspect-category" class="font-medium text-neutral-200 uppercase tracking-wider text-[10px]">DÉTAIL FIXÉ</span>
+        </div>
+        <span id="inspect-timestamp" class="text-neutral-500 text-[9px]">00:00:00</span>
+      </div>
+      <h3 id="inspect-title" class="font-poetic text-lg italic text-neutral-100 mb-1 leading-snug">Robe rouge récurrente</h3>
+      <p id="inspect-desc" class="text-neutral-400 font-light leading-relaxed mb-3 text-[11px]">
+        Le tissu semble se déplacer indépendamment de la trajectoire du corps qui le porte.
+      </p>
+      <div class="bg-neutral-900/80 rounded p-2 border border-neutral-800 space-y-1 text-[10px]">
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Coordonnées :</span>
+          <span id="inspect-coords" class="text-neutral-300">X: 0 | Y: 0</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Statut :</span>
+          <span class="text-emerald-400">CONSIGNÉ AU CARNET</span>
+        </div>
+      </div>
+    </div>
+
+     <!-- Intro (snipet V4.2) -->
+
+    <div id="intro-modal" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050507]/95 backdrop-blur-md p-5 text-center select-none overflow-y-auto">
+
+      <div class="max-w-xl mx-auto space-y-5 my-auto">
+
+        <h1 class="font-poetic text-4xl sm:text-6xl italic text-neutral-100 tracking-wide font-light">Projet Oblivion</h1>
+
+        <p class="font-poetic text-base sm:text-xl italic text-neutral-400 leading-relaxed">
+
+          « Observer le monde, comprendre ce qui le fabrique. »
+
+        </p>
+
+        <div class="h-px w-20 bg-neutral-800 mx-auto"></div>
+
+        <div class="text-[11px] sm:text-xs md:text-sm text-neutral-400 font-mono-code space-y-2 text-left bg-neutral-900/70 p-4 sm:p-5 rounded-xl border border-neutral-800">
+
+          <p><span class="text-neutral-200">• Navigation :</span> Glissez ou utilisez la molette / barre tactile pour parcourir la rue panoramique.</p>
+
+          <p><span class="text-neutral-200">• Cadre d'arpentage :</span> En mode « Capturer » sélectionnez une zone pour noter vos observations</p>
+
+          <p><span class="text-neutral-200">• Inspection :</span> Appui long sur mobile (ou clic droit sur ordi) pour analyser un élément précis.</p>
+
+          <p><span class="text-neutral-200">• Fermer les yeux :</span> Maintenez le bouton ou la barre [ESPACE] pour fermer les yeux et vous reposer.</p>
+
+          <p><span class="text-neutral-200">• L'issue :</span> Elle se trouve dans l'observation.</p>
+
+        </div> 
+        <div class="pt-2">
+          <button id="start-btn" type="button" class="cursor-pointer px-8 py-3.5 rounded-full border border-neutral-600 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-neutral-100 text-xs sm:text-sm font-mono-code uppercase tracking-widest transition-all duration-200 shadow-2xl">
+            Comprendre l'Oblivion
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- a n n i h i l a t i o n -->
+    <div id="liberation-screen" class="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#040405] opacity-0 transition-opacity duration-1000 p-6 text-center">
+      <p class="font-poetic text-2xl sm:text-4xl md:text-5xl italic text-neutral-100 mb-4 font-light max-w-xl leading-relaxed">
+        « Faute d'être observé, le monde a cessé de se défendre. »
+      </p>
+      <div class="h-px w-16 bg-neutral-800 mx-auto mb-5"></div>
+      <p class="text-[10px] sm:text-xs font-mono-code tracking-widest text-neutral-500 mb-8 max-w-md leading-relaxed uppercase">
+        Le monde ne trouve plus d'occurrences à vous montrer, vous pouvez rester dans le noir ou contempler l'itération à nouveau
+      </p>
+      <button id="reset-cycle-btn" class="pointer-events-auto px-7 py-3 rounded-full border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs font-mono-code tracking-widest uppercase transition-all cursor-pointer">
+        Observer à nouveau l'itération
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // Moteur audio
+    // ==========================================
+    class AudioManager {
+      constructor() {
+        this.ctx = null;
+        this.filter = null;
+        this.drone1 = null;
+        this.drone2 = null;
+        this.dissonanceGain = null;
+        this.isReady = false;
+      }
+
+      init() {
+        if (this.isReady) return;
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+          this.ctx = new AudioContext();
+
+          if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+
+          this.filter = this.ctx.createBiquadFilter();
+          this.filter.type = 'lowpass';
+          this.filter.frequency.setValueAtTime(420, this.ctx.currentTime);
+          this.filter.connect(this.ctx.destination);
+
+          this.drone1 = this.ctx.createOscillator();
+          this.drone1.type = 'sine';
+          this.drone1.frequency.setValueAtTime(55, this.ctx.currentTime);
+          const g1 = this.ctx.createGain();
+          g1.gain.setValueAtTime(0.18, this.ctx.currentTime);
+          this.drone1.connect(g1);
+          g1.connect(this.filter);
+          this.drone1.start();
+
+          this.drone2 = this.ctx.createOscillator();
+          this.drone2.type = 'triangle';
+          this.drone2.frequency.setValueAtTime(110, this.ctx.currentTime);
+          const g2 = this.ctx.createGain();
+          g2.gain.setValueAtTime(0.06, this.ctx.currentTime);
+          this.drone2.connect(g2);
+          g2.connect(this.filter);
+          this.drone2.start();
+
+          const dissOsc = this.ctx.createOscillator();
+          dissOsc.type = 'sawtooth';
+          dissOsc.frequency.setValueAtTime(116.5, this.ctx.currentTime);
+          this.dissonanceGain = this.ctx.createGain();
+          this.dissonanceGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+          dissOsc.connect(this.dissonanceGain);
+          this.dissonanceGain.connect(this.filter);
+          dissOsc.start();
+
+          this.isReady = true;
+        } catch (e) {
+          console.warn("Audio Context init fallback:", e);
+        }
+      }
+
+      setBurden(ratio) {
+        if (!this.isReady || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const cutoff = 300 + ratio * 2000;
+          this.filter.frequency.setTargetAtTime(cutoff, now, 0.2);
+          this.dissonanceGain.gain.setTargetAtTime(ratio * 0.12, now, 0.2);
+        } catch (e) {}
+      }
+
+      setEyesClosed(closed) {
+        if (!this.isReady || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          this.filter.frequency.setTargetAtTime(closed ? 70 : 420, now, 0.15);
+        } catch (e) {}
+      }
+
+      playShutterClick() {
+        if (!this.isReady || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(620, now);
+          osc.frequency.exponentialRampToValueAtTime(120, now + 0.07);
+          g.gain.setValueAtTime(0.18, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } catch (e) {}
+      }
+
+      playNightChime() {
+        if (!this.isReady || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(174.61, now);
+          osc.frequency.exponentialRampToValueAtTime(87.31, now + 1.2);
+          g.gain.setValueAtTime(0.2, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 1.25);
+        } catch (e) {}
+      }
+
+      playLiberationHarmony() {
+        if (!this.isReady || !this.ctx) return;
+        try {
+          const notes = [220, 277.18, 329.63, 440, 554.37];
+          const now = this.ctx.currentTime;
+          notes.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, now + idx * 0.12);
+            g.gain.setValueAtTime(0.001, now);
+            g.gain.linearRampToValueAtTime(0.06, now + idx * 0.12 + 0.25);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
+            osc.connect(g);
+            g.connect(this.ctx.destination);
+            osc.start(now + idx * 0.12);
+            osc.stop(now + 5.0);
+          });
+        } catch (e) {}
+      }
+    }
+
+    // ==========================================
+    // Constantes & Variables Globales
+    // ==========================================
+    const WORLD_WIDTH = 4800;
+
+    const canvas = document.getElementById('world-canvas');
+    const ctx = canvas.getContext('2d');
+    const audio = new AudioManager();
+
+    let viewWidth = window.innerWidth;
+    let viewHeight = window.innerHeight;
+    let dpr = window.devicePixelRatio || 1;
+
+    const camera = {
+      x: WORLD_WIDTH * 0.35,
+      targetX: WORLD_WIDTH * 0.35
+    };
+
+    let isRunning = false;
+    let isLiberated = false;
+    let eyesClosed = false;
+    let eyesClosedStartTime = 0;
+    let autoNightTransition = false;
+    let cognitiveBurden = 0;
+    let lastUserActivity = performance.now();
+    let liberationTime = 0;
+
+    // Cycle temporel & Règles Oblivion
+    let currentDay = 1;
+    let dayDuration = null;
+    let dayStartTime = 0;
+    let dayElapsedTime = 0;
+    let observationsMadeThisDay = 0;
+    let isWhiteWorld = false;
+
+    const COLOR_THEMES = [
+      { name: "Nocturne Standard", sky: "#060609", bBase: [12, 13, 18], stroke: "rgba(40, 45, 60,", glow: "rgba(220, 205, 160,", cable: "rgba(35, 38, 48,", lamp: "rgba(240, 225, 180," },
+      { name: "Brumes Ambrées", sky: "#080604", bBase: [18, 14, 11], stroke: "rgba(65, 45, 35,", glow: "rgba(235, 180, 110,", cable: "rgba(45, 35, 28,", lamp: "rgba(255, 190, 120," },
+      { name: "Cyan Spectral", sky: "#040809", bBase: [10, 16, 19], stroke: "rgba(35, 60, 68,", glow: "rgba(140, 225, 230,", cable: "rgba(28, 45, 50,", lamp: "rgba(160, 240, 245," },
+      { name: "Violette Sidérale", sky: "#070409", bBase: [16, 11, 20], stroke: "rgba(55, 38, 65,", glow: "rgba(205, 150, 230,", cable: "rgba(42, 28, 50,", lamp: "rgba(220, 170, 245," },
+      { name: "Monochrome Cendre", sky: "#050505", bBase: [14, 14, 14], stroke: "rgba(50, 50, 50,", glow: "rgba(200, 200, 200,", cable: "rgba(38, 38, 38,", lamp: "rgba(220, 220, 220," }
+    ];
+    let currentTheme = COLOR_THEMES[0];
+
+    let currentInteractionMode = 'pan';
+
+    const keyState = { left: false, right: false };
+    const pointerPos = { x: 0, y: 0, worldX: 0, worldY: 0 };
+    let hoveredEntity = null;
+
+    const selection = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      currentY: 0
+    };
+
+    let touchPanActive = false;
+    let touchLastX = 0;
+    let longPressTimer = null;
+    let touchMovedSignificantly = false;
+
+    const notebookLogs = [];
+    let recurrenceCounter = 0;
+
+    let worldTiles = [];
+    const worldEntities = {
+      buildings: [],
+      lampposts: [],
+      cables: [],
+      pedestrians: []
+    };
+
+    // ==========================================
+    // Redimensionnement
+    // ==========================================
+    function resizeCanvas() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      viewWidth = window.innerWidth;
+      viewHeight = window.innerHeight;
+
+      canvas.width = Math.floor(viewWidth * dpr);
+      canvas.height = Math.floor(viewHeight * dpr);
+      canvas.style.width = `${viewWidth}px`;
+      canvas.style.height = `${viewHeight}px`;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+
+      if (worldTiles.length > 0 && !isWhiteWorld) {
+        buildUrbanWorld();
+      }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
+    resizeCanvas();
+
+    function rectsIntersect(r1, r2) {
+      return !(r2.x > r1.x + r1.w || 
+               r2.x + r2.w < r1.x || 
+               r2.y > r1.y + r1.h || 
+               r2.y + r2.h < r1.y);
+    }
+
+    function pointInRect(px, py, r) {
+      return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    }
+
+    // ==========================================
+    // Génération Procédurale & Règles Oblivion
+    // ==========================================
+    function buildUrbanWorld() {
+      if (isWhiteWorld) {
+        worldTiles = [];
+        worldEntities.buildings = [];
+        worldEntities.lampposts = [];
+        worldEntities.pedestrians = [];
+        return;
+      }
+
+      const loggedIds = new Set(notebookLogs.map(l => l.entityId).filter(Boolean));
+
+      // Identification des immeubles dont toutes les tuiles ont été archivées
+      const preservedBuildingIds = new Set();
+      worldEntities.buildings.forEach(b => {
+        const relatedTiles = worldTiles.filter(t => t.buildingIdx === b.id);
+        if (relatedTiles.length > 0) {
+          const allLogged = relatedTiles.every(t => loggedIds.has(t.id));
+          if (allLogged) {
+            preservedBuildingIds.add(b.id);
+          }
+        }
+      });
+
+      const preservedTiles = worldTiles.filter(t => loggedIds.has(t.id) || (t.buildingIdx && preservedBuildingIds.has(t.buildingIdx)));
+      const preservedBuildings = worldEntities.buildings.filter(b => preservedBuildingIds.has(b.id));
+      const preservedPedestrians = worldEntities.pedestrians.filter(p => loggedIds.has(p.id) || p.isAnomalous);
+
+      currentTheme = COLOR_THEMES[(currentDay - 1) % COLOR_THEMES.length];
+
+      worldTiles = [...preservedTiles];
+      const groundY = viewHeight * 0.74;
+
+      worldEntities.buildings = [...preservedBuildings];
+      let curX = 0;
+      let bIdx = 0;
+
+      while (curX < WORLD_WIDTH) {
+        bIdx++;
+        const bW = 150 + Math.random() * 210;
+        const bH = 310 + Math.random() * 320;
+        const bY = groundY - bH;
+        const floors = Math.floor(3 + Math.random() * 4);
+        const winPerRow = Math.floor(3 + Math.random() * 3);
+
+        const overlapsPreserved = preservedBuildings.some(pb => curX < pb.x + pb.w + 10 && curX + bW > pb.x - 10);
+        if (overlapsPreserved) {
+          curX += bW + 14;
+          continue;
+        }
+
+        const baseC = currentTheme.bBase;
+        const bColor = `rgba(${baseC[0] + Math.random()*7}, ${baseC[1] + Math.random()*7}, ${baseC[2] + Math.random()*8}, 1)`;
+        worldEntities.buildings.push({ id: bIdx, x: curX, y: bY, w: bW, h: bH });
+
+        const roofId = `TOIT_${bIdx}`;
+        if (!worldTiles.some(t => t.id === roofId)) {
+          worldTiles.push({
+            id: roofId,
+            buildingIdx: bIdx,
+            type: 'toiture',
+            title: `Corniche en zinc #${bIdx}`,
+            category: 'STRUCTURE HAUTE',
+            desc: "Bordure en zinc noirci dominant la perspective du boulevard.",
+            x: curX - 6,
+            y: bY - 28,
+            w: bW + 12,
+            h: 32,
+            registered: false,
+            color: 'rgba(25, 27, 35, 0.95)'
+          });
+        }
+
+        const facadeId = `FACADE_${bIdx}`;
+        if (!worldTiles.some(t => t.id === facadeId)) {
+          worldTiles.push({
+            id: facadeId,
+            buildingIdx: bIdx,
+            type: 'facade',
+            title: `Façade calcaire #${bIdx}`,
+            category: 'MAÇONNERIE',
+            desc: "Section de maçonnerie calcaire. La texture semble se recomposer quand on détourne le regard.",
+            x: curX,
+            y: bY + 4,
+            w: bW,
+            h: bH - 8,
+            registered: false,
+            color: bColor
+          });
+        }
+
+        const winW = (bW - (winPerRow + 1) * 10) / winPerRow;
+        const winH = 24;
+        for (let f = 0; f < floors; f++) {
+          const rowY = bY + 30 + f * 48;
+          for (let c = 0; c < winPerRow; c++) {
+            const winId = `WIN_${bIdx}_F${f}_C${c}`;
+            if (!worldTiles.some(t => t.id === winId)) {
+              const winX = curX + 10 + c * (winW + 10);
+              const isLit = (Math.sin(curX * 0.1 + f * 2.8 + c) > 0.32);
+              worldTiles.push({
+                id: winId,
+                buildingIdx: bIdx,
+                type: 'fenetre',
+                title: `Carreau F${f+1}-N${c+1} (Bât. #${bIdx})`,
+                category: isLit ? 'OUVERTURE ILLUMINÉE' : 'VITRE SOMBRE',
+                desc: isLit 
+                  ? "Lanterne simulant une veille humaine derrière un volet tiré."
+                  : "Vitre sans tain reflétant l'absence de lune.",
+                x: winX,
+                y: rowY,
+                w: winW,
+                h: winH,
+                isLit: isLit,
+                registered: false
+              });
+            }
+          }
+        }
+
+        if (Math.random() > 0.38) {
+          const postW = 28 + Math.random() * 22;
+          const postH = 40 + Math.random() * 26;
+          const afficheId = `AFFICHE_${bIdx}`;
+          if (!worldTiles.some(t => t.id === afficheId)) {
+            worldTiles.push({
+              id: afficheId,
+              buildingIdx: bIdx,
+              type: 'affiche',
+              title: `Affiche lacérée #${bIdx}`,
+              category: 'AFFICHAGE URBAIN',
+              desc: "Fragment de typographie décolorée dont le lettrage semble changer de sens.",
+              x: curX + 14 + Math.random() * (bW - 50),
+              y: groundY - postH - 12,
+              w: postW,
+              h: postH,
+              registered: false
+            });
+          }
+        }
+
+        curX += bW + 14 + Math.random() * 24;
+      }
+
+      worldEntities.lampposts = [];
+      let lIdx = 0;
+      for (let x = 110; x < WORLD_WIDTH; x += 340 + Math.random() * 90) {
+        lIdx++;
+        const lH = 260;
+        worldEntities.lampposts.push({ x: x, height: lH, id: lIdx });
+
+        const lampId = `LAMP_${lIdx}`;
+        if (!worldTiles.some(t => t.id === lampId)) {
+          worldTiles.push({
+            id: lampId,
+            type: 'lampadaire',
+            title: `Lanterne sodium #${lIdx}`,
+            category: 'LUMINAIRE PUBLIC',
+            desc: "Faisceau filtré par la brume, maintenant une zone de persistance.",
+            x: x + 6,
+            y: groundY - lH - 24,
+            w: 42,
+            h: 36,
+            registered: false
+          });
+        }
+      }
+
+      let sX = 0;
+      let sIdx = 0;
+      while (sX < WORLD_WIDTH) {
+        sIdx++;
+        const pW = 90 + Math.random() * 70;
+        const solId = `DALLE_${sIdx}`;
+        if (!worldTiles.some(t => t.id === solId)) {
+          worldTiles.push({
+            id: solId,
+            type: 'sol',
+            title: `Dalle de granit #${sIdx}`,
+            category: 'REVÊTEMENT URBAIN',
+            desc: "Granit humide. Ses joints forment un carroyage rigide sous les pas.",
+            x: sX,
+            y: groundY,
+            w: pW,
+            h: viewHeight - groundY,
+            registered: false
+          });
+        }
+        sX += pW;
+      }
+
+      for (let x = 160; x < WORLD_WIDTH; x += 400 + Math.random() * 260) {
+        const egoutId = `EGOUT_${Math.floor(x)}`;
+        if (!worldTiles.some(t => t.id === egoutId)) {
+          worldTiles.push({
+            id: egoutId,
+            type: 'egout',
+            title: `Bouche d'égout en fonte #${Math.floor(x)}`,
+            category: 'VOIRIE SOUTERRAINE',
+            desc: "Grille en fonte laissant monter un souffle tiède issu des fondations oubliées.",
+            x: x,
+            y: groundY + 24 + Math.random() * 32,
+            w: 46,
+            h: 20,
+            registered: false
+          });
+        }
+      }
+
+      for (let x = 80; x < WORLD_WIDTH; x += 220 + Math.random() * 140) {
+        const cLen = 28 + Math.random() * 40;
+        const fissureId = `FISSURE_${Math.floor(x)}`;
+        if (!worldTiles.some(t => t.id === fissureId)) {
+          worldTiles.push({
+            id: fissureId,
+            type: 'fissure',
+            title: `Fracture de bitume #${Math.floor(x)}`,
+            category: 'DÉGRADATION MINÉRALE',
+            desc: "Fracture linéaire se ramifiant dans le pavé sans choc apparent.",
+            x: x,
+            y: groundY + 14 + Math.random() * 40,
+            w: cLen + 10,
+            h: 16,
+            len: cLen,
+            registered: false
+          });
+        }
+      }
+
+      for (let x = 120; x < WORLD_WIDTH; x += 320 + Math.random() * 190) {
+        const pw = 55 + Math.random() * 75;
+        const flaqueId = `FLAQUE_${Math.floor(x)}`;
+        if (!worldTiles.some(t => t.id === flaqueId)) {
+          worldTiles.push({
+            id: flaqueId,
+            type: 'flaque',
+            title: `Miroir d'eau noire #${Math.floor(x)}`,
+            category: 'SURFACE RÉFLÉCHISSANTE',
+            desc: "Eau stagnante réfléchissant les étages supérieurs sans tremblement de surface.",
+            x: x - pw * 0.5,
+            y: groundY + 24,
+            w: pw,
+            h: pw * 0.35,
+            registered: false
+          });
+        }
+      }
+
+      worldEntities.cables = [110, 150, 190];
+
+      worldEntities.pedestrians = [...preservedPedestrians];
+      const targetCount = 38;
+      const needCount = targetCount - worldEntities.pedestrians.length;
+      for (let i = 0; i < needCount; i++) {
+        const isAnomalous = (!worldEntities.pedestrians.some(p => p.isAnomalous) && i === 0);
+        worldEntities.pedestrians.push(createPedestrian(isAnomalous));
+      }
+    }
+
+    function createPedestrian(isAnomalous = false) {
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      const scale = 0.72 + Math.random() * 0.5;
+      const x = Math.random() * WORLD_WIDTH;
+      return {
+        x: x,
+        direction: dir,
+        scale: scale,
+        speed: (0.7 + Math.random() * 0.8) * dir * scale,
+        height: 105 * scale,
+        width: 28 * scale,
+        walkCycle: Math.random() * Math.PI * 2,
+        isAnomalous: isAnomalous,
+        registered: false,
+        nameId: isAnomalous ? "SILHOUETTE_ROBE_ÉCARLATE" : `PASSANT_${Math.floor(1000 + Math.random()*8999)}`,
+        id: `PED_${Math.floor(Math.random() * 999999)}`
+      };
+    }
+
+    // ==========================================
+    // Carnet
+    // ==========================================
+    function logObservation(title, category, desc, worldX, worldY, isAnomalous = false, entityId = null) {
+      const timestamp = new Date().toTimeString().split(' ')[0];
+
+      if (isAnomalous) {
+        recurrenceCounter++;
+        document.getElementById('nb-recurrence-count').textContent = recurrenceCounter;
+      }
+
+      observationsMadeThisDay++;
+
+      const entry = {
+        title: title,
+        category: category,
+        description: desc,
+        timestamp: `${timestamp} (J+${currentDay})`,
+        coords: `X: ${Math.round(worldX)} | Y: ${Math.round(worldY)}`,
+        isAnomalous: isAnomalous,
+        entityId: entityId
+      };
+
+      notebookLogs.unshift(entry);
+      updateNotebookUI();
+      audio.playShutterClick();
+
+      cognitiveBurden = Math.min(100, cognitiveBurden + (isAnomalous ? 12 : 5));
+      lastUserActivity = performance.now();
+    }
+
+    function updateNotebookUI() {
+      const logsContainer = document.getElementById('notebook-logs');
+      const badge = document.getElementById('log-counter-badge');
+      const totalCount = document.getElementById('nb-fixed-count');
+
+      totalCount.textContent = notebookLogs.length;
+      badge.textContent = notebookLogs.length;
+
+      if (notebookLogs.length === 0) {
+        logsContainer.innerHTML = `
+          <div id="empty-log-msg" class="text-center py-10 text-xs font-mono-code text-neutral-600 leading-relaxed">
+            Aucun détail n'a encore été figé par votre regard.<br>
+            <span class="text-[10px] text-neutral-700 block mt-2">Passez en mode « Capturer » ou faites un appui long sur un élément.</span>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      notebookLogs.slice(0, 30).forEach(entry => {
+        html += `
+          <div class="p-3 rounded-lg bg-neutral-900/80 border ${entry.isAnomalous ? 'border-rose-900/80 bg-rose-950/25' : 'border-neutral-800'} text-xs font-mono-code space-y-1.5 transition">
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="${entry.isAnomalous ? 'text-rose-400 font-semibold' : 'text-neutral-500'} tracking-wider uppercase">${entry.category}</span>
+              <span class="text-neutral-500 text-[9px]">${entry.timestamp}</span>
+            </div>
+            <p class="font-poetic text-sm italic text-neutral-200">${entry.title}</p>
+            <p class="text-neutral-400 text-[11px] font-light leading-relaxed">${entry.description}</p>
+            <div class="pt-1 flex justify-between items-center text-[9px] text-neutral-500 border-t border-neutral-800/60">
+              <span>${entry.coords}</span>
+              <span class="text-emerald-400/90 tracking-widest uppercase">Fixé</span>
+            </div>
+          </div>
+        `;
+      });
+      logsContainer.innerHTML = html;
+    }
+
+    // ==========================================
+    // Sélections
+    // ==========================================
+    function processSelectionCapture(box) {
+      const minX = Math.min(box.x1, box.x2) + camera.x;
+      const maxX = Math.max(box.x1, box.x2) + camera.x;
+      const minY = Math.min(box.y1, box.y2);
+      const maxY = Math.max(box.y1, box.y2);
+      const selRect = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+
+      if (selRect.w < 12 || selRect.h < 12) return;
+
+      let captured = 0;
+      const groundY = viewHeight * 0.74;
+
+      worldEntities.pedestrians.forEach(p => {
+        const pedY = groundY - (1 - p.scale) * 105;
+        const pRect = { x: p.x - p.width * 0.5, y: pedY - p.height, w: p.width, h: p.height };
+        if (rectsIntersect(selRect, pRect)) {
+          logObservation(
+            p.isAnomalous ? "Silhouette au manteau écarlate" : `Passant ${p.nameId}`,
+            p.isAnomalous ? "Anomalie Récurrente" : "Entité Humaine",
+            p.isAnomalous 
+              ? "Le manteau pourpre persiste sans réagir à la foule. L'Oblivion s'obstine à vous le présenter." 
+              : "Silhouette anonyme marchant à pas réguliers.",
+            p.x,
+            pedY,
+            p.isAnomalous,
+            p.id
+          );
+          p.registered = true;
+          captured++;
+        }
+      });
+
+      worldTiles.forEach(tile => {
+        if (rectsIntersect(selRect, tile)) {
+          if (!tile.registered) {
+            logObservation(tile.title, tile.category, tile.desc, tile.x, tile.y, false, tile.id);
+            tile.registered = true;
+            captured++;
+          }
+        }
+      });
+
+      if (captured > 0) {
+        document.getElementById('state-quote').textContent = 
+          `« ${captured} éléments contraints par l'arpentage. La surcouche s'épaissit. »`;
+      }
+    }
+
+    // ==========================================
+    // Inspection
+    // ==========================================
+    const inspectModal = document.getElementById('inspect-modal');
+    let inspectTimeout = null;
+
+    function triggerInspection(screenX, screenY) {
+      const worldX = screenX + camera.x;
+      const groundY = viewHeight * 0.74;
+      let target = null;
+
+      for (const p of worldEntities.pedestrians) {
+        const pedY = groundY - (1 - p.scale) * 105;
+        if (Math.abs(p.x - worldX) < p.width * 1.5 && screenY >= pedY - p.height && screenY <= pedY) {
+          target = {
+            id: p.id,
+            title: p.isAnomalous ? "Manteau écarlate récurrent" : `Passant anonyme #${Math.floor(p.x)}`,
+            cat: p.isAnomalous ? "ANOMALIE NON RÉSOLUE" : "CORPS EN TRANSIT",
+            desc: p.isAnomalous 
+              ? "Le tissu écarlate persiste dans le champ visuel."
+              : "Silhouette humaine sans trajectoire définie. Ses pas n'impriment aucune résistance sur le sol.",
+            isAnomalous: p.isAnomalous,
+            coords: `X: ${Math.round(p.x)} | Y: ${Math.round(pedY)}`
+          };
+          p.registered = true;
+          break;
+        }
+      }
+
+      if (!target) {
+        const hits = worldTiles.filter(t => pointInRect(worldX, screenY, t));
+        if (hits.length > 0) {
+          hits.sort((a, b) => (a.w * a.h) - (b.w * b.h));
+          const hit = hits[0];
+          hit.registered = true;
+          target = {
+            id: hit.id,
+            title: hit.title,
+            cat: hit.category,
+            desc: hit.desc,
+            isAnomalous: false,
+            coords: `X: ${Math.round(hit.x)} | Y: ${Math.round(hit.y)}`
+          };
+        }
+      }
+
+      if (!target) {
+        target = {
+          id: `ATMOS_${Math.floor(worldX)}_${Math.floor(screenY)}`,
+          title: "Atmosphère nocturne",
+          cat: "CHAMP VISUEL",
+          desc: "Brume de particules et éclairage diffus sans origine directe.",
+          isAnomalous: false,
+          coords: `X: ${Math.round(worldX)} | Y: ${Math.round(screenY)}`
+        };
+      }
+
+      logObservation(target.title, target.cat, target.desc, worldX, screenY, target.isAnomalous, target.id);
+
+      document.getElementById('inspect-title').textContent = target.title;
+      document.getElementById('inspect-category').textContent = target.cat;
+      document.getElementById('inspect-desc').textContent = target.desc;
+      document.getElementById('inspect-coords').textContent = target.coords;
+      document.getElementById('inspect-timestamp').textContent = new Date().toTimeString().split(' ')[0];
+
+      const modalW = 270;
+      const modalH = 175;
+      let left = screenX + 16;
+      let top = screenY + 16;
+      if (left + modalW > viewWidth) left = Math.max(12, screenX - modalW - 16);
+      if (top + modalH > viewHeight - 60) top = Math.max(12, screenY - modalH - 16);
+
+      inspectModal.style.left = `${left}px`;
+      inspectModal.style.top = `${top}px`;
+      inspectModal.classList.remove('opacity-0', 'scale-95');
+      inspectModal.classList.add('opacity-100', 'scale-100');
+
+      if (inspectTimeout) clearTimeout(inspectTimeout);
+      inspectTimeout = setTimeout(() => {
+        inspectModal.classList.remove('opacity-100', 'scale-100');
+        inspectModal.classList.add('opacity-0', 'scale-95');
+      }, 3200);
+    }
+
+    // ==========================================
+    // Cycle Temporel & Paupières
+    // ==========================================
+    function setEyelids(closed, isNaturalNight = false) {
+      if (eyesClosed === closed) return;
+      eyesClosed = closed;
+      audio.setEyesClosed(closed);
+
+      const eyelids = document.getElementById('eyelids');
+      const labels = document.querySelectorAll('.eyelid-label');
+      const subLabel = document.getElementById('eyelid-sub-label');
+      const mainLabel = document.getElementById('eyelid-main-label');
+
+      if (closed) {
+        eyelids.classList.add('eyelids-closed');
+        labels.forEach(l => l.classList.remove('opacity-0'));
+        eyesClosedStartTime = performance.now();
+
+        if (isNaturalNight) {
+          subLabel.textContent = `Crépuscule — Fin du Jour ${currentDay}`;
+          mainLabel.textContent = "Le cycle touche à sa fin naturelle...";
+          document.getElementById('state-quote').textContent = 
+            `« Le Jour ${currentDay} s'est éteint selon la cadence fixée. »`;
+        } else {
+          const currentElapsed = (performance.now() - dayStartTime) / 1000;
+          if (currentElapsed > 2.0) {
+            dayDuration = currentElapsed;
+            subLabel.textContent = `Cadence redéfinie : ${Math.round(dayDuration)}s`;
+            mainLabel.textContent = "Repos volontaire — Purge et recalibrage du jour...";
+            document.getElementById('state-quote').textContent = 
+              `« Repos volontaire : la durée d'un jour est fixée à ${Math.round(dayDuration)} secondes. »`;
+          } else {
+            subLabel.textContent = "Clignement furtif";
+            mainLabel.textContent = "L'intervalle est trop court pour étalonner le cycle.";
+          }
+        }
+      } else {
+        eyelids.classList.remove('eyelids-closed');
+        labels.forEach(l => l.classList.add('opacity-0'));
+
+        const closedDuration = (performance.now() - eyesClosedStartTime) / 1000;
+        if (closedDuration > 0.4 || isNaturalNight) {
+          advanceToNextDay();
+        }
+      }
+    }
+
+    function advanceToNextDay() {
+      // Transition vers le Monde Blanc : Carnet vide ET aucune observation faite sur la journée complète
+      if (notebookLogs.length === 0 && observationsMadeThisDay === 0 && dayDuration !== null && !isWhiteWorld) {
+        isWhiteWorld = true;
+        document.getElementById('vignette-overlay').style.opacity = '0';
+        document.getElementById('state-quote').textContent = "« Rien n'a été consigné. L'Oblivion n'a plus rien à projeter. »";
+      }
+
+      currentDay++;
+      observationsMadeThisDay = 0;
+      document.getElementById('day-badge').textContent = `Jour ${currentDay < 10 ? '0' + currentDay : currentDay}`;
+      
+      dayStartTime = performance.now();
+      dayElapsedTime = 0;
+
+      purgeVisualScene();
+      buildUrbanWorld();
+
+      camera.targetX = WORLD_WIDTH * 0.35;
+    }
+
+    function purgeVisualScene() {
+      cognitiveBurden = Math.max(0, cognitiveBurden - 35);
+      worldTiles.forEach(t => t.registered = false);
+
+      worldEntities.pedestrians.forEach(p => p.isAnomalous = false);
+      const randP = worldEntities.pedestrians[Math.floor(Math.random() * worldEntities.pedestrians.length)];
+      if (randP) randP.isAnomalous = true;
+    }
+
+    // ==========================================
+    // Commandes Mobiles
+    // ==========================================
+    const btnPan = document.getElementById('btn-mode-pan');
+    const btnSelect = document.getElementById('btn-mode-select');
+    const btnInspect = document.getElementById('btn-mode-inspect');
+    const btnCloseEyes = document.getElementById('btn-close-eyes');
+
+    function setInteractionMode(mode) {
+      currentInteractionMode = mode;
+      [btnPan, btnSelect, btnInspect].forEach(b => {
+        b.className = "touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-transparent bg-neutral-900/70 text-neutral-400 transition cursor-pointer";
+      });
+
+      if (mode === 'pan') {
+        btnPan.className = "touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-sky-500/40 bg-sky-950/40 text-sky-300 font-medium transition cursor-pointer";
+      } else if (mode === 'select') {
+        btnSelect.className = "touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-sky-500/40 bg-sky-950/40 text-sky-300 font-medium transition cursor-pointer";
+      } else if (mode === 'inspect') {
+        btnInspect.className = "touch-mode-btn flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 font-medium transition cursor-pointer";
+      }
+    }
+
+    btnPan.addEventListener('click', () => setInteractionMode('pan'));
+    btnSelect.addEventListener('click', () => setInteractionMode('select'));
+    btnInspect.addEventListener('click', () => setInteractionMode('inspect'));
+
+    ['touchstart', 'mousedown'].forEach(evt => {
+      btnCloseEyes.addEventListener(evt, (e) => {
+        e.preventDefault();
+        setEyelids(true, false);
+      });
+    });
+    ['touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(evt => {
+      btnCloseEyes.addEventListener(evt, (e) => {
+        e.preventDefault();
+        setEyelids(false, false);
+      });
+    });
+
+    // ==========================================
+    // Événements d'Entrée
+    // ==========================================
+    const viewport = document.getElementById('viewport');
+
+    function updateHoverAndCoords(clientX, clientY) {
+      pointerPos.x = clientX;
+      pointerPos.y = clientY;
+      pointerPos.worldX = clientX + camera.x;
+      pointerPos.worldY = clientY;
+
+      if (!isRunning || eyesClosed || isWhiteWorld) return;
+
+      const groundY = viewHeight * 0.74;
+      let foundHover = null;
+
+      for (const p of worldEntities.pedestrians) {
+        const pedY = groundY - (1 - p.scale) * 105;
+        if (Math.abs(p.x - pointerPos.worldX) < p.width * 1.2 && pointerPos.y >= pedY - p.height && pointerPos.y <= pedY) {
+          foundHover = { title: p.isAnomalous ? "Anomalie : Robe rouge" : p.nameId, isAnomalous: p.isAnomalous };
+          break;
+        }
+      }
+
+      if (!foundHover) {
+        const matching = worldTiles.filter(t => pointInRect(pointerPos.worldX, pointerPos.y, t));
+        if (matching.length > 0) {
+          matching.sort((a, b) => (a.w * a.h) - (b.w * b.h));
+          foundHover = matching[0];
+        }
+      }
+
+      hoveredEntity = foundHover;
+      const infoEl = document.getElementById('hovered-tile-info');
+      if (infoEl) {
+        infoEl.textContent = hoveredEntity ? hoveredEntity.title : "Aucun élément";
+        infoEl.className = hoveredEntity && hoveredEntity.isAnomalous 
+          ? "text-rose-400 font-medium truncate max-w-[190px]" 
+          : "text-neutral-300 font-medium truncate max-w-[190px]";
+      }
+    }
+
+    viewport.addEventListener('touchstart', (e) => {
+      if (!isRunning || isLiberated || eyesClosed || isWhiteWorld) return;
+      if (e.target.closest('#touch-controls') || e.target.closest('#notebook-drawer') || e.target.closest('#toggle-notebook-btn') || e.target.closest('#intro-modal')) return;
+
+      lastUserActivity = performance.now();
+      const touch = e.touches[0];
+      const cx = touch.clientX;
+      const cy = touch.clientY;
+
+      updateHoverAndCoords(cx, cy);
+      touchLastX = cx;
+      touchMovedSignificantly = false;
+
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        if (!touchMovedSignificantly && !selection.active) {
+          triggerInspection(cx, cy);
+        }
+      }, 500);
+
+      if (currentInteractionMode === 'select') {
+        selection.active = true;
+        selection.startX = cx;
+        selection.startY = cy;
+        selection.currentX = cx;
+        selection.currentY = cy;
+      } else if (currentInteractionMode === 'inspect') {
+        triggerInspection(cx, cy);
+      } else {
+        touchPanActive = true;
+      }
+    }, { passive: false });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (!isRunning || isLiberated || eyesClosed || isWhiteWorld) return;
+      const touch = e.touches[0];
+      const cx = touch.clientX;
+      const cy = touch.clientY;
+
+      if (Math.abs(cx - touchLastX) > 8) {
+        touchMovedSignificantly = true;
+        if (longPressTimer) clearTimeout(longPressTimer);
+      }
+
+      updateHoverAndCoords(cx, cy);
+
+      if (selection.active) {
+        selection.currentX = cx;
+        selection.currentY = cy;
+      } else if (touchPanActive || currentInteractionMode === 'pan') {
+        const dx = cx - touchLastX;
+        camera.targetX = Math.max(0, Math.min(WORLD_WIDTH - viewWidth, camera.targetX - dx * 1.3));
+        touchLastX = cx;
+      }
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', (e) => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      touchPanActive = false;
+
+      if (selection.active) {
+        selection.active = false;
+        processSelectionCapture({
+          x1: selection.startX,
+          y1: selection.startY,
+          x2: selection.currentX,
+          y2: selection.currentY
+        });
+      }
+    }, { passive: false });
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (!isRunning || isLiberated || eyesClosed || isWhiteWorld) return;
+      if (e.target.closest('#touch-controls') || e.target.closest('#notebook-drawer') || e.target.closest('#toggle-notebook-btn') || e.target.closest('#intro-modal')) return;
+
+      lastUserActivity = performance.now();
+      if (e.button === 0) {
+        if (currentInteractionMode === 'inspect') {
+          triggerInspection(e.clientX, e.clientY);
+        } else {
+          selection.active = true;
+          selection.startX = e.clientX;
+          selection.startY = e.clientY;
+          selection.currentX = e.clientX;
+          selection.currentY = e.clientY;
+        }
+      }
+    });
+
+    viewport.addEventListener('mousemove', (e) => {
+      lastUserActivity = performance.now();
+      updateHoverAndCoords(e.clientX, e.clientY);
+      if (selection.active) {
+        selection.currentX = e.clientX;
+        selection.currentY = e.clientY;
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0 && selection.active) {
+        selection.active = false;
+        processSelectionCapture({
+          x1: selection.startX,
+          y1: selection.startY,
+          x2: selection.currentX,
+          y2: selection.currentY
+        });
+      }
+    });
+
+    viewport.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (!isRunning || isLiberated || eyesClosed || isWhiteWorld) return;
+      if (e.target.closest('#notebook-drawer') || e.target.closest('#toggle-notebook-btn') || e.target.closest('#intro-modal')) return;
+
+      triggerInspection(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('wheel', (e) => {
+      if (!isRunning || isLiberated || isWhiteWorld) return;
+      lastUserActivity = performance.now();
+      camera.targetX = Math.max(0, Math.min(WORLD_WIDTH - viewWidth, camera.targetX + e.deltaY * 1.5 + e.deltaX * 1.5));
+    }, { passive: true });
+
+    window.addEventListener('keydown', (e) => {
+      if (!isRunning || isLiberated) return;
+      lastUserActivity = performance.now();
+
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setEyelids(true, false);
+      }
+      if (!isWhiteWorld) {
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') keyState.left = true;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') keyState.right = true;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && isRunning && !isLiberated) {
+        e.preventDefault();
+        setEyelids(false, false);
+      }
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') keyState.left = false;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') keyState.right = false;
+    });
+
+    // Carnet Drawer
+    const notebookDrawer = document.getElementById('notebook-drawer');
+    document.getElementById('toggle-notebook-btn').addEventListener('click', () => {
+      notebookDrawer.classList.toggle('translate-x-full');
+    });
+    document.getElementById('close-notebook-btn').addEventListener('click', () => {
+      notebookDrawer.classList.add('translate-x-full');
+    });
+    document.getElementById('clear-local-btn').addEventListener('click', () => {
+      notebookLogs.length = 0;
+      updateNotebookUI();
+    });
+
+    // ==========================================
+    // Rendu Canvas
+    // ==========================================
+    function draw(c, dt, now, globalFade) {
+      if (keyState.left) camera.targetX = Math.max(0, camera.targetX - 900 * dt);
+      if (keyState.right) camera.targetX = Math.min(WORLD_WIDTH - viewWidth, camera.targetX + 900 * dt);
+
+      camera.x += (camera.targetX - camera.x) * 0.12;
+      const groundY = viewHeight * 0.74;
+
+      if (isWhiteWorld) {
+        c.fillStyle = '#fafafc';
+        c.fillRect(0, 0, viewWidth, viewHeight);
+        return;
+      }
+
+      c.fillStyle = currentTheme.sky;
+      c.fillRect(0, 0, viewWidth, viewHeight);
+
+      c.save();
+      const pX = -camera.x * 0.22;
+      c.fillStyle = `rgba(11, 12, 16, ${globalFade * 0.75})`;
+      for (let i = 0; i < 28; i++) {
+        const x = pX + i * 200;
+        const h = 240 + (Math.sin(i * 1.4) * 90);
+        c.fillRect(x, groundY - h - 30, 170, h + 30);
+      }
+      c.restore();
+
+      c.save();
+      c.translate(-camera.x, 0);
+
+      const selMinX = selection.active ? Math.min(selection.startX, selection.currentX) + camera.x : -9999;
+      const selMaxX = selection.active ? Math.max(selection.startX, selection.currentX) + camera.x : -9999;
+      const selMinY = selection.active ? Math.min(selection.startY, selection.currentY) : -9999;
+      const selMaxY = selection.active ? Math.max(selection.startY, selection.currentY) : -9999;
+      const curSelBox = { x: selMinX, y: selMinY, w: selMaxX - selMinX, h: selMaxY - selMinY };
+
+      worldTiles.forEach(tile => {
+        if (tile.x + tile.w < camera.x - 40 || tile.x > camera.x + viewWidth + 40) return;
+
+        const isHovered = (hoveredEntity && hoveredEntity.id === tile.id);
+        const inSelection = selection.active && rectsIntersect(curSelBox, tile);
+
+        if (tile.type === 'facade') {
+          c.fillStyle = tile.color || 'rgba(15, 16, 21, 1)';
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          c.strokeStyle = `${currentTheme.stroke} ${0.4 * globalFade})`;
+          c.lineWidth = 1;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.type === 'toiture') {
+          c.fillStyle = tile.color || 'rgba(25, 27, 35, 0.95)';
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          c.strokeStyle = `${currentTheme.stroke} ${0.5 * globalFade})`;
+          c.lineWidth = 1.2;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.type === 'fenetre') {
+          if (tile.isLit) {
+            const glow = Math.min(0.38, (cognitiveBurden / 100) * 0.4 + 0.12) * globalFade;
+            c.fillStyle = `${currentTheme.glow} ${glow})`;
+            c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          } else {
+            c.fillStyle = `rgba(7, 7, 10, ${0.8 * globalFade})`;
+            c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          }
+          c.strokeStyle = `${currentTheme.stroke} ${0.4 * globalFade})`;
+          c.lineWidth = 1;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.type === 'affiche') {
+          c.fillStyle = `rgba(75, 70, 65, ${0.8 * globalFade})`;
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          c.strokeStyle = `rgba(140, 130, 115, ${0.4 * globalFade})`;
+          c.lineWidth = 0.8;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.type === 'sol') {
+          c.fillStyle = `rgba(16, 17, 22, ${globalFade})`;
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          c.strokeStyle = `${currentTheme.stroke} ${0.25 * globalFade})`;
+          c.lineWidth = 1;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.type === 'egout') {
+          c.fillStyle = `rgba(10, 10, 13, ${0.9 * globalFade})`;
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+          c.strokeStyle = `rgba(80, 85, 100, ${0.6 * globalFade})`;
+          c.lineWidth = 1.2;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+          for (let bx = tile.x + 5; bx < tile.x + tile.w - 4; bx += 5) {
+            c.beginPath();
+            c.moveTo(bx, tile.y + 3);
+            c.lineTo(bx, tile.y + tile.h - 3);
+            c.stroke();
+          }
+        } else if (tile.type === 'fissure') {
+          c.strokeStyle = `rgba(100, 105, 120, ${0.45 * globalFade})`;
+          c.lineWidth = 1.2;
+          c.beginPath();
+          c.moveTo(tile.x + 4, tile.y + 6);
+          c.lineTo(tile.x + 4 + tile.len, tile.y + 11);
+          c.stroke();
+        } else if (tile.type === 'flaque') {
+          c.fillStyle = `rgba(10, 12, 16, ${0.75 * globalFade})`;
+          c.beginPath();
+          c.ellipse(tile.x + tile.w * 0.5, tile.y + tile.h * 0.5, tile.w * 0.5, tile.h * 0.5, 0, 0, Math.PI * 2);
+          c.fill();
+        }
+
+        if (inSelection) {
+          c.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+          c.lineWidth = 1.5;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+          c.fillStyle = 'rgba(56, 189, 248, 0.16)';
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (isHovered) {
+          c.strokeStyle = 'rgba(52, 211, 153, 0.9)';
+          c.lineWidth = 1.2;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+          c.fillStyle = 'rgba(52, 211, 153, 0.08)';
+          c.fillRect(tile.x, tile.y, tile.w, tile.h);
+        } else if (tile.registered) {
+          c.strokeStyle = `rgba(160, 175, 195, ${0.35 * globalFade})`;
+          c.lineWidth = 0.8;
+          c.strokeRect(tile.x, tile.y, tile.w, tile.h);
+        }
+      });
+
+      worldEntities.cables.forEach(cy => {
+        c.strokeStyle = `${currentTheme.cable} ${0.5 * globalFade})`;
+        c.lineWidth = 1.2;
+        c.beginPath();
+        c.moveTo(0, cy);
+        for (let x = 0; x < WORLD_WIDTH; x += 280) {
+          c.quadraticCurveTo(x + 140, cy + 22, x + 280, cy);
+        }
+        c.stroke();
+      });
+
+      worldEntities.lampposts.forEach(l => {
+        c.strokeStyle = `rgba(38, 42, 52, ${globalFade})`;
+        c.lineWidth = 3.5;
+        c.beginPath();
+        c.moveTo(l.x, groundY);
+        c.lineTo(l.x, groundY - l.height);
+        c.lineTo(l.x + 24, groundY - l.height - 18);
+        c.stroke();
+
+        const glow = c.createRadialGradient(l.x + 24, groundY - l.height - 18, 4, l.x + 24, groundY - 70, 190);
+        glow.addColorStop(0, `${currentTheme.lamp} ${0.14 * globalFade})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = glow;
+        c.beginPath();
+        c.arc(l.x + 24, groundY - 100, 190, 0, Math.PI * 2);
+        c.fill();
+      });
+
+      worldEntities.pedestrians.forEach(p => {
+        p.x += p.speed * dt * 60;
+        p.walkCycle += Math.abs(p.speed) * 0.08 * dt * 60;
+
+        if (p.direction === 1 && p.x > WORLD_WIDTH + 80) p.x = -80;
+        if (p.direction === -1 && p.x < -80) p.x = WORLD_WIDTH + 80;
+
+        const pedY = groundY - (1 - p.scale) * 105;
+        const bob = Math.sin(p.walkCycle * 2) * (2 * p.scale);
+        const headY = pedY - p.height + bob;
+        const legSwing = Math.sin(p.walkCycle) * (14 * p.scale);
+
+        let alpha = (0.35 + p.scale * 0.55) * globalFade;
+        if (alpha <= 0.01) return;
+
+        if (p.isAnomalous) {
+          c.fillStyle = `rgba(215, 38, 48, ${alpha})`;
+        } else {
+          const tone = Math.floor(18 + p.scale * 45);
+          c.fillStyle = `rgba(${tone}, ${tone}, ${tone + 4}, ${alpha})`;
+        }
+
+        c.beginPath();
+        c.arc(p.x, headY, 6.2 * p.scale, 0, Math.PI * 2);
+        c.fill();
+
+        c.beginPath();
+        c.moveTo(p.x - 7 * p.scale, headY + 9 * p.scale);
+        c.lineTo(p.x + 7 * p.scale, headY + 9 * p.scale);
+        c.lineTo(p.x + 10 * p.scale, pedY - 26 * p.scale);
+        c.lineTo(p.x - 10 * p.scale, pedY - 26 * p.scale);
+        c.closePath();
+        c.fill();
+
+        c.strokeStyle = c.fillStyle;
+        c.lineWidth = 3.2 * p.scale;
+        c.beginPath();
+        c.moveTo(p.x - 4 * p.scale, pedY - 26 * p.scale);
+        c.lineTo(p.x - 4 * p.scale + legSwing, pedY);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(p.x + 4 * p.scale, pedY - 26 * p.scale);
+        c.lineTo(p.x + 4 * p.scale - legSwing, pedY);
+        c.stroke();
+
+        const pedRect = { x: p.x - p.width * 0.5, y: pedY - p.height, w: p.width, h: p.height };
+        const inPedSel = selection.active && rectsIntersect(curSelBox, pedRect);
+
+        if (inPedSel) {
+          c.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+          c.lineWidth = 1.2;
+          c.strokeRect(pedRect.x, pedRect.y, pedRect.w, pedRect.h);
+        } else if (p.registered) {
+          c.strokeStyle = `rgba(180, 190, 210, ${0.4 * globalFade})`;
+          c.lineWidth = 0.8;
+          c.strokeRect(p.x - 15 * p.scale, headY - 5, 30 * p.scale, p.height + 8);
+        }
+      });
+
+      c.restore();
+
+      if (selection.active && !eyesClosed) {
+        const x = Math.min(selection.startX, selection.currentX);
+        const y = Math.min(selection.startY, selection.currentY);
+        const w = Math.abs(selection.currentX - selection.startX);
+        const h = Math.abs(selection.currentY - selection.startY);
+
+        c.fillStyle = 'rgba(56, 189, 248, 0.08)';
+        c.fillRect(x, y, w, h);
+
+        c.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+        c.lineWidth = 1.2;
+        c.setLineDash([4, 4]);
+        c.strokeRect(x, y, w, h);
+        c.setLineDash([]);
+
+        c.fillStyle = 'rgba(56, 189, 248, 0.9)';
+        c.font = '10px monospace';
+        c.fillText(`CADRE [${Math.round(x + camera.x)}, ${Math.round(y)}]`, x + 5, y - 5);
+      }
+
+      if (cognitiveBurden > 28 && !eyesClosed) {
+        const intensity = (cognitiveBurden - 28) / 72;
+        const count = Math.floor(intensity * 4);
+        for (let i = 0; i < count; i++) {
+          if (Math.random() > 0.45) continue;
+          const gy = Math.random() * viewHeight;
+          const gh = 3 + Math.random() * 12;
+          const shift = (Math.random() - 0.5) * intensity * 35;
+          try {
+            c.drawImage(canvas, 0, gy * dpr, viewWidth * dpr, gh * dpr, shift, gy, viewWidth, gh);
+          } catch(e) {}
+        }
+      }
+    }
+
+    // ==========================================
+    // Boucle Principale
+    // ==========================================
+    let lastTime = performance.now();
+
+    function gameLoop(now) {
+      requestAnimationFrame(gameLoop);
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (!isRunning) return;
+
+      if (!isLiberated && !eyesClosed) {
+        dayElapsedTime = (now - dayStartTime) / 1000;
+
+        if (dayDuration !== null) {
+          const progress = Math.min(1, dayElapsedTime / dayDuration);
+          const remaining = Math.max(0, Math.ceil(dayDuration - dayElapsedTime));
+
+          document.getElementById('day-progress-bar').style.width = `${progress * 100}%`;
+          document.getElementById('day-timer-val').textContent = `${remaining}s`;
+
+          if (dayElapsedTime >= dayDuration && !autoNightTransition) {
+            autoNightTransition = true;
+            audio.playNightChime();
+
+            // Fin définitive après le Jour Blanc complet
+            if (isWhiteWorld) {
+              triggerLiberation();
+              return;
+            }
+
+            setEyelids(true, true);
+
+            setTimeout(() => {
+              setEyelids(false, true);
+              autoNightTransition = false;
+            }, 1800);
+          }
+        } else {
+          document.getElementById('day-progress-bar').style.width = '100%';
+          document.getElementById('day-timer-val').textContent = `${Math.floor(dayElapsedTime)}s`;
+        }
+      }
+
+      audio.setBurden(cognitiveBurden / 100);
+
+      const globalFade = isLiberated ? Math.max(0, 1 - (now - liberationTime) / 2500) : 1;
+
+      ctx.clearRect(0, 0, viewWidth, viewHeight);
+      draw(ctx, dt, now, globalFade);
+
+      if (!isLiberated) {
+        document.getElementById('burden-bar').style.width = `${cognitiveBurden}%`;
+        document.getElementById('burden-pct').textContent = `${Math.round(cognitiveBurden)}%`;
+      }
+    }
+
+    function triggerLiberation() {
+      isLiberated = true;
+      liberationTime = performance.now();
+      audio.playLiberationHarmony();
+
+      document.getElementById('top-hud').style.opacity = '0';
+      document.getElementById('bottom-hud').style.opacity = '0';
+      document.getElementById('touch-controls').style.opacity = '0';
+      document.getElementById('notebook-drawer').classList.add('translate-x-full');
+
+      const libScreen = document.getElementById('liberation-screen');
+      setTimeout(() => {
+        libScreen.classList.remove('opacity-0');
+        libScreen.classList.add('opacity-100');
+      }, 1500);
+    }
+
+    // ==========================================
+    // Initialisation
+    // ==========================================
+    function startGame() {
+      audio.init();
+
+      const introModal = document.getElementById('intro-modal');
+      introModal.style.display = 'none';
+      introModal.classList.add('pointer-events-none');
+
+      document.getElementById('top-hud').style.opacity = '1';
+      document.getElementById('bottom-hud').style.opacity = '1';
+      document.getElementById('touch-controls').style.opacity = '1';
+
+      isWhiteWorld = false;
+      document.getElementById('vignette-overlay').style.opacity = '1';
+
+      buildUrbanWorld();
+      isRunning = true;
+      currentDay = 1;
+      observationsMadeThisDay = 0;
+      dayDuration = null;
+      dayStartTime = performance.now();
+      lastUserActivity = performance.now();
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+
+    document.getElementById('reset-cycle-btn').addEventListener('click', () => {
+      const libScreen = document.getElementById('liberation-screen');
+      libScreen.classList.remove('opacity-100');
+      libScreen.classList.add('opacity-0');
+
+      isLiberated = false;
+      isWhiteWorld = false;
+      document.getElementById('vignette-overlay').style.opacity = '1';
+      cognitiveBurden = 0;
+      notebookLogs.length = 0;
+      recurrenceCounter = 0;
+      currentDay = 1;
+      observationsMadeThisDay = 0;
+      dayDuration = null;
+      dayStartTime = performance.now();
+      document.getElementById('day-badge').textContent = 'Jour 01';
+      updateNotebookUI();
+
+      document.getElementById('top-hud').style.opacity = '1';
+      document.getElementById('bottom-hud').style.opacity = '1';
+      document.getElementById('touch-controls').style.opacity = '1';
+      buildUrbanWorld();
+      lastUserActivity = performance.now();
+    });
+
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+<!-- Merci à @_Adelfartis11 pour les moteurs de rendu et la mise en page css -->
+</html>
